@@ -1,0 +1,5 @@
+/foundry-auth-proxy
+/result
+.direnv/
+/config.json
+/secrets/
