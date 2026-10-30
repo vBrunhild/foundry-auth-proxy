@@ -120,22 +120,22 @@ func (handler *Handler) autoLogin(response http.ResponseWriter, request *http.Re
 		return handler.denyUnmapped(response, "no identity provided")
 	}
 
-	user, mapped := handler.config.Users[subject]
+	users, err := config.LoadUsers(handler.config.UsersFile)
+	if err != nil {
+		handler.logger.Error("load users", "err", err)
+		http.Error(response, "login misconfigured", http.StatusInternalServerError)
+
+		return true
+	}
+
+	user, mapped := users[subject]
 	if !mapped {
 		handler.logger.Warn("no foundry user mapped", "subject", subject)
 
 		return handler.denyUnmapped(response, "no Foundry user is mapped to this account")
 	}
 
-	password, err := user.Password()
-	if err != nil {
-		handler.logger.Error("read password", "subject", subject, "err", err)
-		http.Error(response, "login misconfigured", http.StatusInternalServerError)
-
-		return true
-	}
-
-	result, err := handler.joiner.Join(request.Context(), user.FoundryUserId, password, request.Header.Get("Cookie"))
+	result, err := handler.joiner.Join(request.Context(), user.FoundryUserId, user.Password, request.Header.Get("Cookie"))
 	if errors.Is(err, login.ErrRejected) {
 		handler.logger.Warn("foundry rejected login", "subject", subject, "err", err)
 		return false

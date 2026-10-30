@@ -7,7 +7,6 @@ import (
 	"net"
 	"net/url"
 	"os"
-	"strings"
 )
 
 const (
@@ -17,16 +16,16 @@ const (
 
 type User struct {
 	FoundryUserId string `json:"foundryUserId"`
-	PasswordFile  string `json:"passwordFile"`
+	Password      string `json:"password"`
 }
 
 type Config struct {
-	FoundryURL     string          `json:"foundryURL"`
-	Listen         string          `json:"listen"`
-	UserHeader     string          `json:"userHeader"`
-	OnUnmapped     string          `json:"onUnmapped"`
-	TrustedProxies []string        `json:"trustedProxies"`
-	Users          map[string]User `json:"users"`
+	FoundryURL     string   `json:"foundryURL"`
+	Listen         string   `json:"listen"`
+	UserHeader     string   `json:"userHeader"`
+	OnUnmapped     string   `json:"onUnmapped"`
+	TrustedProxies []string `json:"trustedProxies"`
+	UsersFile      string   `json:"usersFile"`
 }
 
 func Load(path string) (*Config, error) {
@@ -88,25 +87,34 @@ func (config *Config) validate() error {
 		}
 	}
 
-	for name, user := range config.Users {
-		if user.FoundryUserId == "" || user.PasswordFile == "" {
-			return fmt.Errorf("user %q needs foundryUserId and passwordFile", name)
-		}
+	if config.UsersFile == "" {
+		return errors.New("usersFile is required")
 	}
 
 	return nil
 }
 
-func (user User) Password() (string, error) {
-	contents, err := os.ReadFile(user.PasswordFile)
+func LoadUsers(path string) (map[string]User, error) {
+	file, err := os.Open(path)
 	if err != nil {
-		return "", err
+		return nil, err
+	}
+	defer file.Close()
+
+	var users map[string]User
+
+	decoder := json.NewDecoder(file)
+	decoder.DisallowUnknownFields()
+
+	if err := decoder.Decode(&users); err != nil {
+		return nil, fmt.Errorf("parse %s: %w", path, err)
 	}
 
-	password := strings.TrimRight(string(contents), "\r\n")
-	if password == "" {
-		return "", errors.New("password file is empty: " + user.PasswordFile)
+	for name, user := range users {
+		if user.FoundryUserId == "" || user.Password == "" {
+			return nil, fmt.Errorf("user %q needs foundryUserId and password", name)
+		}
 	}
 
-	return password, nil
+	return users, nil
 }

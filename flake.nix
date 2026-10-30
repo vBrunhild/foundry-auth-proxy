@@ -52,7 +52,6 @@
           gotools
           golangci-lint
           delve
-          jujutsu
         ];
       };
     });

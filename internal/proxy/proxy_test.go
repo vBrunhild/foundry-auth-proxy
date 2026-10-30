@@ -63,14 +63,14 @@ func fakeFoundry(t *testing.T) *httptest.Server {
 func newHandler(t *testing.T, foundryURL, onUnmapped string, trustedProxies []string) http.Handler {
 	t.Helper()
 
-	directory := t.TempDir()
-	writePassword := func(name, contents string) string {
-		path := filepath.Join(directory, name)
-		if err := os.WriteFile(path, []byte(contents), 0o600); err != nil {
-			t.Fatal(err)
-		}
-
-		return path
+	usersFile := filepath.Join(t.TempDir(), "users.json")
+	users := `{
+		"alice":  {"foundryUserId": "aliceid",  "password": "secret"},
+		"bob":    {"foundryUserId": "bobid",    "password": "wrong"},
+		"banned": {"foundryUserId": "banned",   "password": "secret"}
+	}`
+	if err := os.WriteFile(usersFile, []byte(users), 0o600); err != nil {
+		t.Fatal(err)
 	}
 
 	cfg := &config.Config{
@@ -78,11 +78,7 @@ func newHandler(t *testing.T, foundryURL, onUnmapped string, trustedProxies []st
 		UserHeader:     "Remote-User",
 		OnUnmapped:     onUnmapped,
 		TrustedProxies: trustedProxies,
-		Users: map[string]config.User{
-			"alice":  {FoundryUserId: "aliceid", PasswordFile: writePassword("alice", "secret\n")},
-			"bob":    {FoundryUserId: "bobid", PasswordFile: writePassword("bob", "wrong")},
-			"banned": {FoundryUserId: "banned", PasswordFile: writePassword("banned", "secret")},
-		},
+		UsersFile:      usersFile,
 	}
 
 	resolver := identity.HeaderResolver{Header: "Remote-User"}

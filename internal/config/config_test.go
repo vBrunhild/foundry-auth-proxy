@@ -20,7 +20,7 @@ func loadFromString(t *testing.T, body string) (*config.Config, error) {
 }
 
 func TestDefaults(t *testing.T) {
-	loaded, err := loadFromString(t, `{"foundryURL":"http://127.0.0.1:30000","trustedProxies":["10.0.0.0/8"]}`)
+	loaded, err := loadFromString(t, `{"foundryURL":"http://127.0.0.1:30000","trustedProxies":["10.0.0.0/8"],"usersFile":"/u.json"}`)
 	if err != nil {
 		t.Fatal(err)
 	}
@@ -32,13 +32,13 @@ func TestDefaults(t *testing.T) {
 
 func TestInvalid(t *testing.T) {
 	invalidConfigs := map[string]string{
-		"no url":             `{"trustedProxies":["10.0.0.0/8"]}`,
-		"bad unmapped":       `{"foundryURL":"http://x:1","trustedProxies":["10.0.0.0/8"],"onUnmapped":"nope"}`,
+		"no url":             `{"trustedProxies":["10.0.0.0/8"],"usersFile":"/u.json"}`,
+		"bad unmapped":       `{"foundryURL":"http://x:1","trustedProxies":["10.0.0.0/8"],"usersFile":"/u.json","onUnmapped":"nope"}`,
 		"no trusted proxies": `{"foundryURL":"http://x:1"}`,
 		"empty trusted":      `{"foundryURL":"http://x:1","trustedProxies":[]}`,
 		"bad cidr":           `{"foundryURL":"http://x:1","trustedProxies":["nope"]}`,
-		"empty user":         `{"foundryURL":"http://x:1","trustedProxies":["10.0.0.0/8"],"users":{"a":{}}}`,
-		"unknown key":        `{"foundryURL":"http://x:1","trustedProxies":["10.0.0.0/8"],"oops":1}`,
+		"no users file":      `{"foundryURL":"http://x:1","trustedProxies":["10.0.0.0/8"]}`,
+		"unknown key":        `{"foundryURL":"http://x:1","trustedProxies":["10.0.0.0/8"],"usersFile":"/u.json","oops":1}`,
 	}
 
 	for name, body := range invalidConfigs {
@@ -48,14 +48,45 @@ func TestInvalid(t *testing.T) {
 	}
 }
 
-func TestPasswordTrimsNewline(t *testing.T) {
-	passwordFile := filepath.Join(t.TempDir(), "password")
-	if err := os.WriteFile(passwordFile, []byte("hunter2\n"), 0o600); err != nil {
+func TestLoadUsers(t *testing.T) {
+	path := filepath.Join(t.TempDir(), "users.json")
+	body := `{"alice":{"foundryUserId":"AbC","password":"hunter2"}}`
+	if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
 		t.Fatal(err)
 	}
 
-	password, err := config.User{PasswordFile: passwordFile}.Password()
-	if err != nil || password != "hunter2" {
-		t.Fatalf("got %q %v", password, err)
+	users, err := config.LoadUsers(path)
+	if err != nil {
+		t.Fatal(err)
+	}
+
+	if users["alice"].FoundryUserId != "AbC" || users["alice"].Password != "hunter2" {
+		t.Fatalf("got %+v", users)
+	}
+}
+
+func TestLoadUsersInvalid(t *testing.T) {
+	invalidUsers := map[string]string{
+		"missing password": `{"alice":{"foundryUserId":"AbC"}}`,
+		"missing id":       `{"alice":{"password":"hunter2"}}`,
+		"unknown key":      `{"alice":{"foundryUserId":"AbC","password":"x","oops":1}}`,
+		"not an object":    `[]`,
+	}
+
+	for name, body := range invalidUsers {
+		path := filepath.Join(t.TempDir(), "users.json")
+		if err := os.WriteFile(path, []byte(body), 0o600); err != nil {
+			t.Fatal(err)
+		}
+
+		if _, err := config.LoadUsers(path); err == nil {
+			t.Errorf("%s: expected error", name)
+		}
+	}
+}
+
+func TestLoadUsersMissingFile(t *testing.T) {
+	if _, err := config.LoadUsers(filepath.Join(t.TempDir(), "absent.json")); err == nil {
+		t.Fatal("expected error")
 	}
 }
