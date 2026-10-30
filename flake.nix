@@ -42,7 +42,7 @@
       {
         default = foundry-auth-proxy;
       }
-      // pkgs.lib.optionalAttrs pkgs.stdenv.isLinux {inherit image;});
+      // pkgs.lib.optionalAttrs pkgs.stdenv.hostPlatform.isLinux {inherit image;});
 
     devShells = forAllSystems (pkgs: {
       default = pkgs.mkShell {
